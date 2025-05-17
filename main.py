@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes import health_router
+from api.routes import health_router
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import os
