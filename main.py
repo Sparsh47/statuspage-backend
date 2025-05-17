@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 import os
 import redis
 
-if os.getenv("ENV") != "production":
-    load_dotenv(dotenv_path=".env.local", override=True)
+load_dotenv(dotenv_path=".env.local", override=True)
 
 POSTGRESQL_USER = os.getenv("POSTGRESQL_USER")
 POSTGRESQL_PASSWORD = os.getenv("POSTGRESQL_PASSWORD")
