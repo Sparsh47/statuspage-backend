@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 from schemas import BaseResponse
-from user import UserResponse
+from schemas.user import UserResponse
 
 
 class TeamBase(BaseModel):

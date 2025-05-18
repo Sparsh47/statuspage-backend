@@ -6,7 +6,7 @@ import redis.asyncio as redis
 from core.config import settings
 from db.init_db import init_db
 
-from api.routes import health_router, services_router
+from api.routes import health_router, services_router, organization_router, team_router
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=".env.local", override=True)
@@ -62,6 +62,8 @@ async def shutdown_event():
 
 app.include_router(health_router)
 app.include_router(services_router)
+app.include_router(organization_router)
+app.include_router(team_router)
 
 # Import and include API routes
 # from app.api.routes import auth, organizations, teams, services, incidents, public
