@@ -7,7 +7,7 @@ from schemas.user import UserResponse
 
 class TeamBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=50)
-    organization_id: str
+    organization_id: int
 
 
 class TeamCreate(TeamBase):
