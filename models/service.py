@@ -39,6 +39,7 @@ class ServiceStatusUpdate(Base):
     message = Column(String, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     # Relationships
     service = relationship("Service", back_populates="status_updates")

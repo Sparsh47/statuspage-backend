@@ -6,7 +6,10 @@ import redis.asyncio as redis
 from core.config import settings
 from db.init_db import init_db
 
-from api.routes import health_router
+from api.routes import health_router, services_router
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=".env.local", override=True)
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -27,8 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(health_router)
 
 # Redis client
 redis_client = None
@@ -58,6 +59,9 @@ async def shutdown_event():
     if redis_client:
         await redis_client.close()
         logger.info("Redis connection closed")
+
+app.include_router(health_router)
+app.include_router(services_router)
 
 # Import and include API routes
 # from app.api.routes import auth, organizations, teams, services, incidents, public

@@ -2,6 +2,9 @@ from fastapi import Request, HTTPException, status, Depends
 from jose import jwt, JWTError
 import httpx
 import os
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=".env.local", override=True)
 
 CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL", "https://your-clerk-domain/.well-known/jwks.json")
 CLERK_ISSUER = os.getenv("CLERK_ISSUER", "https://your-clerk-domain")

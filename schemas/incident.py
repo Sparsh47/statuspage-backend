@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from datetime import datetime
-from __init import BaseResponse
+from schemas import BaseResponse
 
 
 # Enum values as literals for type checking
