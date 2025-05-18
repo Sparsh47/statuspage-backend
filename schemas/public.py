@@ -1,30 +1,41 @@
-from pydantic import BaseModel
-from typing import List, Dict, Optional
+# File: schemas/public.py
+from pydantic import BaseModel, Field
+from typing import List, Optional, Literal
 from datetime import datetime
 
+IncidentStatus = Literal[
+    "Investigating",
+    "Identified",
+    "Monitoring",
+    "Resolved",
+    "Scheduled",
+    "In Progress",
+    "Completed",
+]
 
-class ServiceStatus(BaseModel):
-    id: str
-    name: str
-    status: str
-
-
-class ActiveIncident(BaseModel):
-    id: str
+class PublicIncident(BaseModel):
+    id: int
     title: str
-    status: str
-    started_at: datetime
-    type: str
-    affected_services: List[str]
+    description: Optional[str]
+    status: IncidentStatus
+    incident_type: Optional[str] = Field(None, alias="type")
+    created_at: datetime
 
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True
+    }
 
-class RecentIncident(ActiveIncident):
-    resolved_at: Optional[datetime] = None
+class PublicService(BaseModel):
+    id: int
+    name: str
+    status: Optional[str] = None  # Allow missing/null status
 
+    model_config = {
+        "from_attributes": True
+    }
 
-class PublicStatusPage(BaseModel):
-    organization: Dict[str, str]
-    services: List[ServiceStatus]
-    active_incidents: List[ActiveIncident]
-    recent_incidents: List[RecentIncident]
-    overall_status: str
+class PublicStatus(BaseModel):
+    status: str  # "Operational" or "Degraded"
+    affected_services: List[str] = []
+    active_incidents: List[PublicIncident] = []

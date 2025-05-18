@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=".env.local", override=True)
 
-CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL", "https://your-clerk-domain/.well-known/jwks.json")
-CLERK_ISSUER = os.getenv("CLERK_ISSUER", "https://your-clerk-domain")
+CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL", "https://loving-gopher-42.clerk.accounts.dev/.well-known/jwks.json")
+CLERK_ISSUER = os.getenv("CLERK_ISSUER", "https://loving-gopher-42.clerk.accounts.dev")
 CLERK_AUDIENCE = os.getenv("CLERK_AUDIENCE", "authenticated")
 
 # Cache for keys
@@ -46,6 +46,7 @@ async def verify_clerk_token(request: Request):
             audience=CLERK_AUDIENCE,
             issuer=CLERK_ISSUER,
         )
+        print("PAYLOAD: ", payload)
         return payload  # Contains user_id, org_id, etc.
     except JWTError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Token validation failed: {str(e)}")

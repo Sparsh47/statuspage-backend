@@ -6,13 +6,11 @@ from schemas import BaseResponse
 
 class UserBase(BaseModel):
     email: EmailStr
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-
+    full_name: Optional[str] = None
 
 class UserCreate(UserBase):
     # For Clerk integration, we'll use their IDs
-    id: str
+    clerk_id: str
 
 
 class UserUpdate(BaseModel):
@@ -21,7 +19,7 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseResponse, UserBase):
-    pass
+    clerk_id: str
 
 
 class UserInDB(UserResponse):

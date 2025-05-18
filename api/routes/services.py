@@ -1,23 +1,26 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import Dict, Any
 from datetime import datetime
+import json
 
+from core.auth import verify_clerk_token
 from db.session import get_db
 from models.service import Service, ServiceStatusUpdate
 from schemas.service import (
     ServiceCreate,
     ServiceResponse,
     ServiceUpdate,
-    ServiceStatusUpdate as ServiceStatusUpdateSchema,
     ServiceStatusHistoryResponse,
 )
-from core.auth import verify_clerk_token
+from core.redis_client import redis_client
 
 router = APIRouter(prefix="/services", tags=["services"])
 
+# Helper to convert SQLAlchemy model to dict
+
 def service_to_dict(service: Service) -> dict:
-    """Convert Service SQLAlchemy model to dict for Pydantic validation"""
     return {
         "id": str(service.id),
         "name": service.name,
@@ -28,23 +31,21 @@ def service_to_dict(service: Service) -> dict:
         "updated_at": service.updated_at or datetime.utcnow(),
     }
 
-@router.get("/", response_model=List[ServiceResponse])
+@router.get("/", response_model=list[ServiceResponse])
 def list_services(
         db: Session = Depends(get_db),
         token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    """List all services for the user's organization"""
     org_id = token_payload.get("org_id")
     services = db.query(Service).filter(Service.organization_id == org_id).all()
     return [ServiceResponse.model_validate(service_to_dict(s)) for s in services]
 
 @router.post("/", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
-def create_service(
+async def create_service(
         service_in: ServiceCreate,
         db: Session = Depends(get_db),
         token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    """Create a new service in the user's organization"""
     org_id = token_payload.get("org_id")
     user_id = token_payload.get("user_id")
     service = Service(
@@ -57,7 +58,7 @@ def create_service(
     db.commit()
     db.refresh(service)
 
-    # record initial status
+    # initial status record
     status_record = ServiceStatusUpdate(
         service_id=service.id,
         status=service.current_status,
@@ -65,6 +66,16 @@ def create_service(
     )
     db.add(status_record)
     db.commit()
+
+    # Publish via Redis
+    event = {
+        "type": "service",
+        "id": str(service.id),
+        "name": service.name,
+        "current_status": service.current_status,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    await redis_client.publish("status_updates", json.dumps(event))
 
     return ServiceResponse.model_validate(service_to_dict(service))
 
@@ -74,7 +85,6 @@ def get_service(
         db: Session = Depends(get_db),
         token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    """Fetch a single service by ID"""
     org_id = token_payload.get("org_id")
     service = (
         db.query(Service)
@@ -86,13 +96,12 @@ def get_service(
     return ServiceResponse.model_validate(service_to_dict(service))
 
 @router.patch("/{service_id}", response_model=ServiceResponse)
-def update_service(
+async def update_service(
         service_id: int,
         service_in: ServiceUpdate,
         db: Session = Depends(get_db),
         token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    """Update service fields and record status change"""
     org_id = token_payload.get("org_id")
     user_id = token_payload.get("user_id")
     service = (
@@ -103,7 +112,7 @@ def update_service(
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
 
-    # If status changed, record it
+    # If status changed, record history
     if service_in.current_status and service_in.current_status != service.current_status:
         status_record = ServiceStatusUpdate(
             service_id=service.id,
@@ -119,6 +128,15 @@ def update_service(
     db.commit()
     db.refresh(service)
 
+    # Publish update
+    event = {
+        "type": "service",
+        "id": str(service.id),
+        "current_status": service.current_status,
+        "updated_at": service.updated_at.isoformat(),
+    }
+    await redis_client.publish("status_updates", json.dumps(event))
+
     return ServiceResponse.model_validate(service_to_dict(service))
 
 @router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -127,7 +145,6 @@ def delete_service(
         db: Session = Depends(get_db),
         token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    """Delete a service from the organization"""
     org_id = token_payload.get("org_id")
     service = (
         db.query(Service)
@@ -138,15 +155,13 @@ def delete_service(
         raise HTTPException(status_code=404, detail="Service not found")
     db.delete(service)
     db.commit()
-    return
 
-@router.get("/{service_id}/history", response_model=List[ServiceStatusHistoryResponse])
+@router.get("/{service_id}/history", response_model=list[ServiceStatusHistoryResponse])
 def service_history(
         service_id: int,
         db: Session = Depends(get_db),
         token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    """Get the status update history for a service"""
     org_id = token_payload.get("org_id")
     service = (
         db.query(Service)
@@ -160,7 +175,7 @@ def service_history(
             "id": str(su.id),
             "status": su.status,
             "created_at": su.created_at,
-            "updated_at": su.updated_at or su.created_at or datetime.utcnow(),
+            "updated_at": su.updated_at or su.created_at,
             "created_by": su.created_by,
             "service_id": str(su.service_id),
         })
