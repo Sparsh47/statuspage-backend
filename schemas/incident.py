@@ -1,115 +1,85 @@
-from pydantic import BaseModel, Field, field_validator
+# File: schemas/incident.py
+
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Literal
 from datetime import datetime
-from schemas import BaseResponse  # adjust import as needed
 
-# --- Enums as Literals ---
-IncidentType = Literal["Incident", "Maintenance"]
-IncidentStatus = Literal[
-    "Investigating",
-    "Identified",
-    "Monitoring",
-    "Resolved",
-    "Scheduled",
-    "In Progress",
-    "Completed",
-]
+# Reuse these literals
+IncidentType   = Literal["incident", "maintenance"]
+IncidentStatus = Literal["investigating", "identified", "monitoring", "resolved"]
+IncidentImpact = Literal["minor", "major", "critical"]
 
-# --- Shared input fields ---
 class IncidentBase(BaseModel):
     title: str = Field(..., min_length=5, max_length=200)
     description: Optional[str] = None
-    incident_type: IncidentType = Field("Incident", alias="type")
-    status: IncidentStatus = "Investigating"
+    type: IncidentType   = Field(default="incident")
+    status: IncidentStatus = Field(default="investigating")
+    impact: IncidentImpact = Field(default="minor")
 
-    # Coerce from lowercase or mixed-case storage
-    @field_validator('incident_type', mode='before')
-    @classmethod
-    def normalize_type(cls, v):
-        if isinstance(v, str):
-            return v.capitalize()
-        return v
+    # Still optional on create
+    organization_id: Optional[int] = None
+    created_by:      Optional[int] = None
 
-    @field_validator('status', mode='before')
-    @classmethod
-    def normalize_status(cls, v):
-        if isinstance(v, str):
-            # Title-case each word to match Literal values
-            return ' '.join(word.capitalize() for word in v.split())
-        return v
+    scheduled_start: Optional[datetime] = None
+    scheduled_end:   Optional[datetime] = None
 
-# --- Payload for creating a new incident ---
+
 class IncidentCreate(IncidentBase):
-    service_ids: List[str] = []
+    service_ids: List[int] = []
 
-# --- Payload for updating an incident ---
+
 class IncidentUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=5, max_length=200)
     description: Optional[str] = None
     status: Optional[IncidentStatus] = None
+    impact: Optional[IncidentImpact] = None
+    scheduled_start: Optional[datetime] = None
+    scheduled_end:   Optional[datetime] = None
 
-    @field_validator('status', mode='before')
-    @classmethod
-    def normalize_status(cls, v):
-        if isinstance(v, str):
-            return ' '.join(word.capitalize() for word in v.split())
-        return v
 
-# --- Response for an incident ---
-class IncidentResponse(BaseResponse):
+class BaseResponse(BaseModel):
     id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IncidentResponse(BaseResponse):
     title: str
     description: Optional[str]
-    incident_type: IncidentType = Field(..., alias="type")
+    type: IncidentType
     status: IncidentStatus
+    impact: IncidentImpact
+
+    # ← Made these optional so returning None passes validation
     organization_id: Optional[int] = None
-    created_by: Optional[int] = None
-    created_at: Optional[datetime] = None
-    resolved_at: Optional[datetime] = None
-    affected_services: List[str] = []
+    created_by:      Optional[int] = None
 
-    # Validators also apply for response
-    @field_validator('incident_type', mode='before')
-    @classmethod
-    def normalize_type_response(cls, v):
-        if isinstance(v, str):
-            return v.capitalize()
-        return v
+    resolved_at:      Optional[datetime] = None
+    scheduled_start:  Optional[datetime] = None
+    scheduled_end:    Optional[datetime] = None
+    affected_services: List[int] = []
 
-    @field_validator('status', mode='before')
-    @classmethod
-    def normalize_status_response(cls, v):
-        if isinstance(v, str):
-            return ' '.join(word.capitalize() for word in v.split())
-        return v
+    model_config = ConfigDict(from_attributes=True)
 
-    model_config = {
-        "from_attributes": True,
-        "populate_by_name": True
-    }
 
-# --- Shared input for incident updates ---
 class IncidentUpdateBase(BaseModel):
     message: str = Field(..., min_length=5)
-    status: IncidentStatus
+    status:  IncidentStatus
 
-    @field_validator('status', mode='before')
-    @classmethod
-    def normalize_status(cls, v):
-        if isinstance(v, str):
-            return ' '.join(word.capitalize() for word in v.split())
-        return v
 
-# --- Payload for creating an incident update ---
 class IncidentUpdateCreate(IncidentUpdateBase):
-    pass
+    incident_id: int
+    created_by:   int
 
-# --- Response for an incident update ---
+
 class IncidentUpdateResponse(BaseResponse, IncidentUpdateBase):
     incident_id: int
-    created_by: int
-    updated_at: Optional[datetime] = None  # <- Fix for validation error
+    created_by:  int
 
-# --- Full incident with its updates attached ---
+    model_config = ConfigDict(from_attributes=True)
+
+
 class IncidentWithUpdates(IncidentResponse):
     updates: List[IncidentUpdateResponse] = []

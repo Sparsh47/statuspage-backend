@@ -48,10 +48,14 @@ connected_websockets: list[WebSocket] = []
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize DB, Redis, and start the listener task."""
+    """
+    Initialize DB, Redis, and start the Redis Pub/Sub listener.
+    """
+    # 1. Initialize the database
     init_db()
     logger.info("Database initialized")
 
+    # 2. Connect to Redis
     global redis_client
     redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
     try:
@@ -61,7 +65,7 @@ async def startup_event():
         logger.error(f"Failed to connect to Redis: {e}")
         raise
 
-    # Fire-and-forget the Redis Pub/Sub listener
+    # 3. Launch the Redis‐subscribe loop in the background
     asyncio.create_task(_redis_listener())
 
 
@@ -85,17 +89,14 @@ async def websocket_endpoint(ws: WebSocket):
     logger.info(f"WebSocket client connected: {ws.client}")
 
     try:
-        # Keep the connection alive indefinitely
         while True:
-            # We don't actually expect clients to send anything;
-            # this just waits until they disconnect.
+            # We don't expect clients to send data; this just waits until they disconnect.
             await ws.receive_text()
     except WebSocketDisconnect:
         logger.info(f"WebSocket client disconnected: {ws.client}")
     except Exception as e:
         logger.error(f"WebSocket error with {ws.client}: {e}")
     finally:
-        # Ensure removal even on unexpected errors
         if ws in connected_websockets:
             connected_websockets.remove(ws)
 
@@ -103,7 +104,7 @@ async def websocket_endpoint(ws: WebSocket):
 async def _redis_listener():
     """
     Listen on the Redis "status_updates" channel and broadcast
-    every incoming message to all connected WebSocket clients.
+    each incoming message to all connected WebSocket clients.
     """
     if not redis_client:
         logger.error("Redis client not initialized; listener exiting.")
@@ -121,12 +122,11 @@ async def _redis_listener():
                 logger.error(f"Invalid JSON in Redis message: {e}")
                 continue
 
-            # Broadcast to every live client
             for ws in connected_websockets.copy():
                 try:
+                    # Send the already-ISO-formatted JSON payload
                     await ws.send_json(payload)
                 except Exception:
-                    # If send fails, remove that socket
                     connected_websockets.remove(ws)
                     logger.info(f"Removed dead WebSocket: {ws.client}")
 

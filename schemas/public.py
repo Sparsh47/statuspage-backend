@@ -1,41 +1,37 @@
-# File: schemas/public.py
-from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
 from datetime import datetime
-
-IncidentStatus = Literal[
-    "Investigating",
-    "Identified",
-    "Monitoring",
-    "Resolved",
-    "Scheduled",
-    "In Progress",
-    "Completed",
-]
-
-class PublicIncident(BaseModel):
-    id: int
-    title: str
-    description: Optional[str]
-    status: IncidentStatus
-    incident_type: Optional[str] = Field(None, alias="type")
-    created_at: datetime
-
-    model_config = {
-        "from_attributes": True,
-        "populate_by_name": True
-    }
 
 class PublicService(BaseModel):
     id: int
     name: str
-    status: Optional[str] = None  # Allow missing/null status
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    organization_id: Optional[int] = None
+    current_status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
+
+class PublicIncident(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    type: str
+    status: str
+    impact: str
+    organization_id: Optional[int] = None
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+    scheduled_start: Optional[datetime] = None
+    scheduled_end: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class PublicStatus(BaseModel):
-    status: str  # "Operational" or "Degraded"
-    affected_services: List[str] = []
-    active_incidents: List[PublicIncident] = []
+    services: List[PublicService]
+    incidents: List[PublicIncident]
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

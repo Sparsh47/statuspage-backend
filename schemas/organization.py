@@ -1,34 +1,33 @@
-from pydantic import BaseModel, Field, validator
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, List
 from datetime import datetime
-import re
-from schemas import BaseResponse
-
+from schemas.team import TeamResponse
 
 class OrganizationBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    slug: Optional[str] = Field(None, min_length=2, max_length=50)
-
-    @validator('slug')
-    def validate_slug(cls, v):
-        if v is not None and not re.match("^[a-z0-9](-?[a-z0-9])*$", v):
-            raise ValueError('Slug must contain only lowercase letters, numbers, and hyphens')
-        return v
-
+    slug: str = Field(..., min_length=2, max_length=100)
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+    is_active: Optional[bool] = True
 
 class OrganizationCreate(OrganizationBase):
     pass
 
-
 class OrganizationUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=100)
-    slug: Optional[str] = Field(None, min_length=2, max_length=50)
+    slug: Optional[str] = Field(None, min_length=2, max_length=100)
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    website: Optional[str] = None
+    is_active: Optional[bool] = None
 
+class OrganizationResponse(OrganizationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
 
-class OrganizationResponse(BaseResponse, OrganizationBase):
-    is_active: bool
-
+    model_config = ConfigDict(from_attributes=True)
 
 class OrganizationWithDetails(OrganizationResponse):
-    services_count: int
-    active_incidents_count: int
+    teams: Optional[List[TeamResponse]] = []

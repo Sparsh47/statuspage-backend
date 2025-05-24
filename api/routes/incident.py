@@ -1,166 +1,146 @@
-import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Header
-from sqlalchemy.orm import Session
-from typing import List, Dict, Any
-from datetime import datetime
-import json
+# File: api/routes/incidents.py
 
-from core.auth import verify_clerk_token
-from db.session import get_db
-from models.incident import Incident, IncidentUpdate
+import json
+from datetime import datetime
+from fastapi import APIRouter, Depends, status, HTTPException, Path, Body
+from sqlalchemy.orm import Session
+
+from models.incident import Incident, IncidentUpdate as IncidentUpdateModel
 from schemas.incident import (
     IncidentCreate,
     IncidentResponse,
+    IncidentUpdate,
     IncidentWithUpdates,
-    IncidentUpdateCreate,
-    IncidentUpdateResponse,
 )
 from core.redis_client import redis_client
+from db.session import get_db
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
-@router.get("/", response_model=List[IncidentResponse])
-def list_incidents(
-        db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
-):
-    incidents = db.query(Incident).filter(Incident.organization_id == token_payload.get("org_id")).all()
-    return incidents
 
-@router.post("/", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=IncidentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_incident(
-        payload: IncidentCreate,
+        payload: IncidentCreate = Body(...),
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    incident = Incident(
-        title=payload.title,
-        description=payload.description,
-        type=payload.incident_type,
-        status=payload.status,
-        organization_id=token_payload.get("org_id"),
-        created_by=token_payload.get("user_id"),
-        created_at=datetime.utcnow(),
-    )
-    db.add(incident)
-    db.commit()
-    db.refresh(incident)
+    """
+    Create a new Incident. service_ids is dropped if present.
+    No authentication required.
+    """
+    data = payload.model_dump()
+    # Remove service_ids so it doesn't blow up the constructor
+    service_ids = data.pop("service_ids", None)
 
-    # Publish creation event
+    # Build and persist the Incident
+    inc = Incident(**data)
+    db.add(inc)
+    db.commit()
+    db.refresh(inc)
+
+    # TODO: if you need to link to services, handle `service_ids` here
+
+    # Broadcast the new incident event
     event = {
-        "type": "incident",
-        "id": str(incident.id),
-        "service_id": str(incident.service_id),
-        "status": incident.status,
-        "created_at": incident.created_at.isoformat(),
+        "event_type": "incident",
+        "id": inc.id,
+        "title": inc.title,
+        "description": inc.description,
+        "type": inc.type,
+        "status": inc.status,
+        "impact": inc.impact,
+        "created_at": inc.created_at.isoformat(),
     }
     await redis_client.publish("status_updates", json.dumps(event))
 
-    return incident
+    return inc
 
-@router.get("/{incident_id}", response_model=IncidentWithUpdates)
+
+@router.get(
+    "/",
+    response_model=list[IncidentResponse],
+)
+def list_incidents(db: Session = Depends(get_db)):
+    return db.query(Incident).all()
+
+
+@router.get(
+    "/{incident_id}",
+    response_model=IncidentWithUpdates,
+)
 def get_incident(
-        incident_id: int,
+        incident_id: int = Path(..., gt=0),
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    incident = (
-        db.query(Incident)
-        .filter(
-            Incident.id == incident_id,
-            Incident.organization_id == token_payload.get("org_id"),
-            )
-        .first()
-    )
-    if not incident:
+    inc = db.get(Incident, incident_id)
+    if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
-    return incident
+    return inc
 
-@router.put("/{incident_id}", response_model=IncidentResponse)
+
+@router.put(
+    "/{incident_id}",
+    response_model=IncidentResponse,
+)
 async def update_incident(
-        incident_id: int,
-        payload: IncidentCreate,
+        payload: IncidentUpdate = Body(...),
+        incident_id: int = Path(..., gt=0),
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    incident = (
-        db.query(Incident)
-        .filter(
-            Incident.id == incident_id,
-            Incident.organization_id == token_payload.get("org_id"),
-            )
-        .first()
-    )
-    if not incident:
+    inc = db.get(Incident, incident_id)
+    if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
-    # Update fields
-    for field, value in payload.dict(exclude_unset=True).items():
-        if field == "incident_type":
-            setattr(incident, "type", value)
-        else:
-            setattr(incident, field, value)
-    incident.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(incident)
 
-    # Publish update event
+    for field, val in payload.model_dump(exclude_unset=True).items():
+        setattr(inc, field, val)
+    inc.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(inc)
+
     event = {
-        "type": "incident",
-        "id": str(incident.id),
-        "service_id": str(incident.service_id),
-        "status": incident.status,
-        "updated_at": incident.updated_at.isoformat(),
+        "event_type": "incident",
+        "id": inc.id,
+        "title": inc.title,
+        "description": inc.description,
+        "type": inc.type,
+        "status": inc.status,
+        "impact": inc.impact,
+        "updated_at": inc.updated_at.isoformat(),
     }
     await redis_client.publish("status_updates", json.dumps(event))
 
-    return incident
+    return inc
 
-@router.delete("/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)
+
+@router.delete(
+    "/{incident_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 def delete_incident(
         incident_id: int,
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    incident = (
-        db.query(Incident)
-        .filter(
-            Incident.id == incident_id,
-            Incident.organization_id == token_payload.get("org_id"),
-            )
-        .first()
-    )
-    if not incident:
+    inc = db.get(Incident, incident_id)
+    if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
-    db.delete(incident)
+    db.delete(inc)
     db.commit()
 
-@router.post("/{incident_id}/updates", response_model=IncidentUpdateResponse, status_code=status.HTTP_201_CREATED)
-async def add_incident_update(
+
+@router.get(
+    "/{incident_id}/updates",
+    response_model=list[IncidentResponse],
+)
+def list_incident_updates(
         incident_id: int,
-        payload: IncidentUpdateCreate,
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    update = IncidentUpdate(
-        incident_id=incident_id,
-        message=payload.message,
-        status=payload.status,
-        created_by=token_payload.get("user_id"),
-        created_at=datetime.utcnow(),
+    return (
+        db.query(IncidentUpdateModel)
+        .filter(IncidentUpdateModel.incident_id == incident_id)
+        .order_by(IncidentUpdateModel.created_at.desc())
+        .all()
     )
-    db.add(update)
-    db.commit()
-    db.refresh(update)
-
-    # Publish update event
-    event = {
-        "type": "incident_update",
-        "incident_id": str(incident_id),
-        "update_id": str(update.id),
-        "status": update.status,
-        "message": update.message,
-        "created_at": update.created_at.isoformat(),
-    }
-    await redis_client.publish("status_updates", json.dumps(event))
-
-    return update

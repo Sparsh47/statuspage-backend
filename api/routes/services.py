@@ -1,183 +1,205 @@
-import logging
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import Dict, Any
-from datetime import datetime
-import json
+# File: api/routes/services.py
 
-from core.auth import verify_clerk_token
-from db.session import get_db
+import json
+from datetime import datetime
+from fastapi import APIRouter, Depends, status, HTTPException, Path, Body
+from sqlalchemy.orm import Session
+
 from models.service import Service, ServiceStatusUpdate
-from schemas.service import (
-    ServiceCreate,
-    ServiceResponse,
-    ServiceUpdate,
-    ServiceStatusHistoryResponse,
-)
+from schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
 from core.redis_client import redis_client
+from db.session import get_db
+from core.auth import verify_clerk_token
 
 router = APIRouter(prefix="/services", tags=["services"])
 
-# Helper to convert SQLAlchemy model to dict
-
-def service_to_dict(service: Service) -> dict:
-    return {
-        "id": str(service.id),
-        "name": service.name,
-        "description": service.description,
-        "organization_id": service.organization_id,
-        "current_status": service.current_status,
-        "created_at": service.created_at,
-        "updated_at": service.updated_at or datetime.utcnow(),
-    }
-
-@router.get("/", response_model=list[ServiceResponse])
-def list_services(
-        db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
-):
-    org_id = token_payload.get("org_id")
-    services = db.query(Service).filter(Service.organization_id == org_id).all()
-    return [ServiceResponse.model_validate(service_to_dict(s)) for s in services]
-
-@router.post("/", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ServiceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_service(
         service_in: ServiceCreate,
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    org_id = token_payload.get("org_id")
-    user_id = token_payload.get("user_id")
-    service = Service(
+    # 1. Derive a slug from the name
+    slug_value = service_in.name.strip().lower().replace(" ", "-")
+
+    # 2. Persist the new Service
+    svc = Service(
         name=service_in.name,
+        slug=slug_value,
         description=service_in.description,
-        organization_id=org_id,
+        organization_id=None,
         current_status=service_in.current_status,
     )
-    db.add(service)
+    db.add(svc)
     db.commit()
-    db.refresh(service)
+    db.refresh(svc)
 
-    # initial status record
+    # 3. Record an initial status update WITH timestamps
+    now = datetime.utcnow()
     status_record = ServiceStatusUpdate(
-        service_id=service.id,
-        status=service.current_status,
-        created_by=user_id,
+        service_id=svc.id,
+        status=svc.current_status,
+        message=None,
+        created_by=None,
+        created_at=now,
+        updated_at=now,             # ← ensure this is never NULL
     )
     db.add(status_record)
     db.commit()
 
-    # Publish via Redis
+    # 4. Broadcast via Redis
     event = {
-        "type": "service",
-        "id": str(service.id),
-        "name": service.name,
-        "current_status": service.current_status,
-        "updated_at": datetime.utcnow().isoformat(),
+        "event_type": "service",
+        "id": svc.id,
+        "name": svc.name,
+        "slug": svc.slug,
+        "current_status": svc.current_status,
+        "updated_at": now.isoformat(),
     }
     await redis_client.publish("status_updates", json.dumps(event))
 
-    return ServiceResponse.model_validate(service_to_dict(service))
+    return svc
 
-@router.get("/{service_id}", response_model=ServiceResponse)
-def get_service(
-        service_id: int,
+@router.get(
+    "/",
+    response_model=list[ServiceResponse],
+)
+async def list_services(
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
+        token_payload: dict = Depends(verify_clerk_token),
 ):
-    org_id = token_payload.get("org_id")
-    service = (
-        db.query(Service)
-        .filter(Service.id == service_id, Service.organization_id == org_id)
-        .first()
-    )
+    # No org_id filtering—just return everything
+    return db.query(Service).all()
+
+
+@router.get(
+    "/{service_id}",
+    response_model=ServiceResponse,
+)
+async def get_service(
+        service_id: int = Path(..., gt=0),
+        db: Session = Depends(get_db),
+        token_payload: dict = Depends(verify_clerk_token),
+):
+    service = db.get(Service, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
-    return ServiceResponse.model_validate(service_to_dict(service))
+    return service
 
-@router.patch("/{service_id}", response_model=ServiceResponse)
+
+@router.put(
+    "/{service_id}",
+    response_model=ServiceResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def update_service(
-        service_id: int,
-        service_in: ServiceUpdate,
+        payload: ServiceUpdate = Body(...),
+        service_id: int = Path(..., gt=0),
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
 ):
-    org_id = token_payload.get("org_id")
-    user_id = token_payload.get("user_id")
-    service = (
-        db.query(Service)
-        .filter(Service.id == service_id, Service.organization_id == org_id)
-        .first()
-    )
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
-
-    # If status changed, record history
-    if service_in.current_status and service_in.current_status != service.current_status:
-        status_record = ServiceStatusUpdate(
-            service_id=service.id,
-            status=service_in.current_status,
-            created_by=user_id,
+    """
+    Update an existing Service. Fields in `payload` that are unset will be left intact.
+    No authentication required.
+    """
+    svc = db.get(Service, service_id)
+    if not svc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found",
         )
-        db.add(status_record)
 
-    # apply other updates
-    for field, value in service_in.dict(exclude_unset=True).items():
-        setattr(service, field, value)
+    # Apply only the provided fields
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(svc, field, value)
 
+    svc.updated_at = datetime.utcnow()
     db.commit()
-    db.refresh(service)
+    db.refresh(svc)
 
-    # Publish update
+    # Broadcast the update event
     event = {
-        "type": "service",
-        "id": str(service.id),
-        "current_status": service.current_status,
-        "updated_at": service.updated_at.isoformat(),
+        "event_type": "service",
+        "id": svc.id,
+        "name": svc.name,
+        "slug": svc.slug,
+        "current_status": svc.current_status,
+        "updated_at": svc.updated_at.isoformat(),
     }
     await redis_client.publish("status_updates", json.dumps(event))
 
-    return ServiceResponse.model_validate(service_to_dict(service))
+    return svc
 
-@router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_service(
+@router.delete(
+    "/{service_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_service(
         service_id: int,
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
+        token_payload: dict = Depends(verify_clerk_token),
 ):
-    org_id = token_payload.get("org_id")
-    service = (
-        db.query(Service)
-        .filter(Service.id == service_id, Service.organization_id == org_id)
-        .first()
-    )
+    service = db.get(Service, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     db.delete(service)
     db.commit()
 
-@router.get("/{service_id}/history", response_model=list[ServiceStatusHistoryResponse])
-def service_history(
+
+@router.post(
+    "/{service_id}/status",
+    response_model=ServiceResponse,
+)
+async def create_service_status_update(
+        service_id: int,
+        payload: ServiceUpdate,
+        db: Session = Depends(get_db),
+        token_payload: dict = Depends(verify_clerk_token),
+):
+    user_id = token_payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    status_record = ServiceStatusUpdate(
+        service_id=service_id,
+        status=payload.current_status,
+        created_by=user_id,
+    )
+    db.add(status_record)
+
+    service = db.get(Service, service_id)
+    service.current_status = payload.current_status
+    service.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(service)
+
+    event = {
+        "event_type": "service",
+        "id": service.id,
+        "name": service.name,
+        "slug": service.slug,
+        "current_status": service.current_status,
+        "updated_at": service.updated_at.isoformat(),
+    }
+    await redis_client.publish("status_updates", json.dumps(event))
+
+    return service
+
+
+@router.get(
+    "/{service_id}/status/history",
+    response_model=list[ServiceResponse],
+)
+async def list_service_status_history(
         service_id: int,
         db: Session = Depends(get_db),
-        token_payload: Dict[str, Any] = Depends(verify_clerk_token),
+        token_payload: dict = Depends(verify_clerk_token),
 ):
-    org_id = token_payload.get("org_id")
-    service = (
-        db.query(Service)
-        .filter(Service.id == service_id, Service.organization_id == org_id)
-        .first()
+    return (
+        db.query(ServiceStatusUpdate)
+        .filter(ServiceStatusUpdate.service_id == service_id)
+        .order_by(ServiceStatusUpdate.created_at.desc())
+        .all()
     )
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
-    return [
-        ServiceStatusHistoryResponse.model_validate({
-            "id": str(su.id),
-            "status": su.status,
-            "created_at": su.created_at,
-            "updated_at": su.updated_at or su.created_at,
-            "created_by": su.created_by,
-            "service_id": str(su.service_id),
-        })
-        for su in service.status_updates
-    ]

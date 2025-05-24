@@ -1,6 +1,6 @@
 # app/api/routes/organization.py
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, status, Path
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 from slugify import slugify
 from uuid import uuid4
@@ -29,60 +29,46 @@ def generate_unique_slug(base_slug: str, db: Session):
         counter += 1
     return slug
 
-@router.post("/", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=OrganizationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_organization(
         payload: OrganizationCreate,
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
 ):
-    base_slug = slugify(payload.name)
-    payload.slug = generate_unique_slug(base_slug, db)
-
     org = Organization(**payload.dict())
     db.add(org)
     db.commit()
     db.refresh(org)
-    return OrganizationResponse(
-        id=str(org.id),
-        name=org.name,
-        slug=org.slug,
-        created_at=org.created_at,
-        updated_at=org.updated_at,
-        is_active=org.is_active
-    )
+    return org
 
 @router.get("/", response_model=List[OrganizationResponse])
 def list_organizations(db: Session = Depends(get_db)):
     return db.query(Organization).all()
 
-@router.get("/{org_id}", response_model=OrganizationWithDetails)
-def get_organization(org_id: int, db: Session = Depends(get_db)):
-    org = db.get(Organization, org_id)
+@router.get(
+    "/{org_id}",
+    response_model=OrganizationWithDetails,
+)
+def get_organization(
+        org_id: int = Path(..., gt=0),
+        db: Session = Depends(get_db),
+):
+    org = (
+        db.query(Organization)
+        .options(selectinload(Organization.teams))
+        .filter(Organization.id == org_id)
+        .first()
+    )
     if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
-    # Count services belonging to this org
-    services_count = db.query(Service).filter(Service.organization_id == org_id).count()
-
-    # Count active incidents (status != "resolved") for this org
-    active_incidents_count = (
-        db.query(Incident)
-        .filter(
-            Incident.organization_id == org_id,
-            Incident.status != "resolved"
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Organization with id={org_id} not found",
         )
-        .count()
-    )
+    return org
 
-    return OrganizationWithDetails(
-        id=org.id,
-        name=org.name,
-        slug=org.slug,
-        created_at=org.created_at,
-        updated_at=org.updated_at,
-        is_active=org.is_active,
-        services_count=services_count,
-        active_incidents_count=active_incidents_count,
-    )
 
 @router.patch("/{org_id}", response_model=OrganizationResponse)
 def update_organization(

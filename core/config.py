@@ -52,13 +52,6 @@ class Settings(BaseSettings):
     CLERK_API_KEY: str = os.getenv("CLERK_API_KEY", "")
     CLERK_FRONTEND_API: str = os.getenv("CLERK_FRONTEND_API", "")
 
-    # SMTP settings for email notifications (optional)
-    SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")
-    SMTP_PORT: Optional[int] = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: Optional[str] = os.getenv("SMTP_USER")
-    SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD")
-    FROM_EMAIL: Optional[str] = os.getenv("FROM_EMAIL")
-
     # Frontend URL for CORS
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
