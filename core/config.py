@@ -19,24 +19,16 @@ DEBUG = False
 # Only needed if you verify tokens server-side:
 CLERK_API_KEY = ""          # (optional backend-only key)
 CLERK_FRONTEND_API = ""     # your Clerk publishable key
-CLERK_JWKS_URL = (
-    "https://loving-gopher-42.clerk.accounts.dev/.well-known/jwks.json"
-)
+CLERK_JWKS_URL = "https://loving-gopher-42.clerk.accounts.dev/.well-known/jwks.json"
+
 CLERK_ISSUER = "https://loving-gopher-42.clerk.accounts.dev"
 CLERK_AUDIENCE = "authenticated"
 
 # -----------------------------------------------------------------------------
 # Database & Redis (force SSL/TLS)
 # -----------------------------------------------------------------------------
-DATABASE_URL = (
-    "postgresql://postgres:AWZ7qSFrB4WRop55"
-    "@db.bilwoyqidotwddxgdmga.supabase.co:5432/postgres"
-    "?sslmode=require"
-)
-REDIS_URL = (
-    "rediss://:AVkDAAIjcDFiNzgzYzY4YmFlMDY0NThiYmZiNTY1MGVhOWY0NjI5ZnAxMA"
-    "@social-guppy-22787.upstash.io:6379/0"
-)
+DATABASE_URL ="postgresql://postgres:AWZ7qSFrB4WRop55@db.bilwoyqidotwddxgdmga.supabase.co:5432/postgres?sslmode=require"
+REDIS_URL ="rediss://:AVkDAAIjcDFiNzgzYzY4YmFlMDY0NThiYmZiNTY1MGVhOWY0NjI5ZnAxMA@social-guppy-22787.upstash.io:6379/0"
 
 # -----------------------------------------------------------------------------
 # CORS
@@ -48,7 +40,6 @@ BACKEND_CORS_ORIGINS = [
     "http://localhost:5173",
     "https://statuspage-frontend.vercel.app",
 ]
-
 
 # -----------------------------------------------------------------------------
 # Export a single global settings object
