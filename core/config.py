@@ -14,10 +14,6 @@ DEBUG = False
 # -----------------------------------------------------------------------------
 # Security / Auth
 # -----------------------------------------------------------------------------
-# A long random string—keep this secret!
-SECRET_KEY = "your-generated-secret-here"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # -----------------------------------------------------------------------------
 # Database & Redis
