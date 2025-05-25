@@ -30,7 +30,7 @@ CLERK_AUDIENCE = "authenticated"
 # -----------------------------------------------------------------------------
 DATABASE_URL = (
     "postgresql://postgres:AWZ7qSFrB4WRop55"
-    "@bilwoyqidotwddxgdmga.supabase.co:5432/postgres"
+    "@db.bilwoyqidotwddxgdmga.supabase.co:5432/postgres"
     "?sslmode=require"
 )
 REDIS_URL = (
