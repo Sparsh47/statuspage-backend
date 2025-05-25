@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         "http://localhost:8080",
         "http://localhost:3000",
         "http://localhost:5173",
+        "https://statuspage-frontend.vercel.app/"
     ]
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
@@ -58,8 +59,15 @@ class Settings(BaseSettings):
     # Computed properties
     @property
     def DATABASE_URL(self) -> str:
-        """Build PostgreSQL connection string from individual components."""
-        return f"postgresql://{self.POSTGRESQL_USER}:{self.POSTGRESQL_PASSWORD}@{self.POSTGRESQL_HOST}:{self.POSTGRESQL_PORT}/{self.POSTGRESQL_DBNAME}"
+        """Build PostgreSQL connection string from individual components, with SSL required."""
+        return (
+            f"postgresql://{self.POSTGRESQL_USER}:"
+            f"{self.POSTGRESQL_PASSWORD}@"
+            f"{self.POSTGRESQL_HOST}:"
+            f"{self.POSTGRESQL_PORT}/"
+            f"{self.POSTGRESQL_DBNAME}"
+            f"?sslmode=require"
+        )
 
     @property
     def REDIS_URL(self) -> str:
