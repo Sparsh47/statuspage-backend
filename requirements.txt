@@ -22,7 +22,7 @@ email_validator==2.2.0
 exceptiongroup==1.3.0
 fastapi==0.115.12
 # fastapi-cli==0.0.7   # CLI tool—remove if not used in production
-greenlet==1.1.2
+greenlet==2.0.2
 h11==0.16.0
 httpcore==1.0.9
 httplib2==0.20.2
