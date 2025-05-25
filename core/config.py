@@ -1,49 +1,60 @@
 # core/config.py
 
-import os
-import secrets
-from typing import List, Union
+"""
+Application configuration constants.
+Everything is hard-coded for PRODUCTION deployment.
+"""
 
-from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, validator
-from pydantic_settings import BaseSettings
+# -----------------------------------------------------------------------------
+# Environment & Debug
+# -----------------------------------------------------------------------------
+ENV = "PRODUCTION"
+DEBUG = False
 
+# -----------------------------------------------------------------------------
+# Security / Auth
+# -----------------------------------------------------------------------------
+# A long random string—keep this secret!
+SECRET_KEY = "your-generated-secret-here"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-class Settings(BaseSettings):
-    # Environment
-    ENV: str = os.getenv("ENV", "DEVELOPMENT")
-    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+# -----------------------------------------------------------------------------
+# Database & Redis
+# -----------------------------------------------------------------------------
+# Supabase Postgres (force SSL)
+DATABASE_URL = (
+    "postgresql://postgres:AWZ7qSFrB4WRop55"
+    "@db.bilwoyqidotwddxgdmga.supabase.co:5432/postgres"
+    "?sslmode=require"
+)
 
-    # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+# Upstash Redis over TLS
+REDIS_URL = (
+    "rediss://:AVkDAAIjcDFiNzgzYzY4YmFlMDY0NThiYmZiNTY1MGVhOWY0NjI5ZnAxMA"
+    "@social-guppy-22787.upstash.io:6379/0"
+)
 
-    # Database & cache (read full URLs from env)
-    DATABASE_URL: PostgresDsn
-    REDIS_URL: RedisDsn
+# -----------------------------------------------------------------------------
+# CORS
+# -----------------------------------------------------------------------------
+# List all allowed origins here:
+BACKEND_CORS_ORIGINS = [
+    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://statuspage-frontend.vercel.app",
+]
 
-    # CORS origins (comma-separated in env)
-    BACKEND_CORS_ORIGINS: List[str] = []
+# -----------------------------------------------------------------------------
+# Clerk (Auth) settings
+# -----------------------------------------------------------------------------
+# (Only needed if you verify tokens server-side)
+CLERK_API_KEY = ""          # (optional backend-only key)
+CLERK_FRONTEND_API = ""     # your Clerk publishable key
 
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(
-            cls, v: Union[str, List[str]]
-    ) -> List[str]:
-        if isinstance(v, str):
-            # split on commas, strip whitespace
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v
-
-    # Clerk (Auth) settings
-    CLERK_API_KEY: str
-    CLERK_FRONTEND_API: str
-    CLERK_JWKS_URL: AnyHttpUrl
-    CLERK_ISSUER: AnyHttpUrl
-    CLERK_AUDIENCE: str
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-
-
-settings = Settings()
+CLERK_JWKS_URL = (
+    "https://loving-gopher-42.clerk.accounts.dev/.well-known/jwks.json"
+)
+CLERK_ISSUER = "https://loving-gopher-42.clerk.accounts.dev"
+CLERK_AUDIENCE = "authenticated"
