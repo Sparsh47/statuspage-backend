@@ -27,7 +27,7 @@ CLERK_AUDIENCE = "authenticated"
 # -----------------------------------------------------------------------------
 # Database & Redis (force SSL/TLS)
 # -----------------------------------------------------------------------------
-DATABASE_URL ="postgresql://postgres:AWZ7qSFrB4WRop55@db.bilwoyqidotwddxgdmga.supabase.co:5432/postgres?sslmode=require"
+DATABASE_URL ="postgresql://postgres.bilwoyqidotwddxgdmga:AWZ7qSFrB4WRop55@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslrequire=true"
 REDIS_URL ="rediss://:AVkDAAIjcDFiNzgzYzY4YmFlMDY0NThiYmZiNTY1MGVhOWY0NjI5ZnAxMA@social-guppy-22787.upstash.io:6379/0"
 
 # -----------------------------------------------------------------------------
