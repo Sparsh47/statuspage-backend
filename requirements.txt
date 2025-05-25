@@ -13,7 +13,7 @@ colorama==0.4.4
 config==0.5.1
 cryptography==3.4.8
 # dbus-python==1.2.18  # desktop-only
-defer==1.0.6
+# defer==1.0.6
 distro==1.7.0
 dnspython==2.7.0
 # dotenv==0.9.9        # use python-dotenv instead
