@@ -5,6 +5,8 @@ Application configuration constants.
 Everything is hard-coded for PRODUCTION deployment.
 """
 
+from types import SimpleNamespace
+
 # -----------------------------------------------------------------------------
 # Environment & Debug
 # -----------------------------------------------------------------------------
@@ -14,18 +16,23 @@ DEBUG = False
 # -----------------------------------------------------------------------------
 # Security / Auth
 # -----------------------------------------------------------------------------
+# Only needed if you verify tokens server-side:
+CLERK_API_KEY = ""          # (optional backend-only key)
+CLERK_FRONTEND_API = ""     # your Clerk publishable key
+CLERK_JWKS_URL = (
+    "https://loving-gopher-42.clerk.accounts.dev/.well-known/jwks.json"
+)
+CLERK_ISSUER = "https://loving-gopher-42.clerk.accounts.dev"
+CLERK_AUDIENCE = "authenticated"
 
 # -----------------------------------------------------------------------------
-# Database & Redis
+# Database & Redis (force SSL/TLS)
 # -----------------------------------------------------------------------------
-# Supabase Postgres (force SSL)
 DATABASE_URL = (
     "postgresql://postgres:AWZ7qSFrB4WRop55"
     "@db.bilwoyqidotwddxgdmga.supabase.co:5432/postgres"
     "?sslmode=require"
 )
-
-# Upstash Redis over TLS
 REDIS_URL = (
     "rediss://:AVkDAAIjcDFiNzgzYzY4YmFlMDY0NThiYmZiNTY1MGVhOWY0NjI5ZnAxMA"
     "@social-guppy-22787.upstash.io:6379/0"
@@ -42,15 +49,19 @@ BACKEND_CORS_ORIGINS = [
     "https://statuspage-frontend.vercel.app",
 ]
 
-# -----------------------------------------------------------------------------
-# Clerk (Auth) settings
-# -----------------------------------------------------------------------------
-# (Only needed if you verify tokens server-side)
-CLERK_API_KEY = ""          # (optional backend-only key)
-CLERK_FRONTEND_API = ""     # your Clerk publishable key
 
-CLERK_JWKS_URL = (
-    "https://loving-gopher-42.clerk.accounts.dev/.well-known/jwks.json"
+# -----------------------------------------------------------------------------
+# Export a single global settings object
+# -----------------------------------------------------------------------------
+settings = SimpleNamespace(
+    ENV=ENV,
+    DEBUG=DEBUG,
+    DATABASE_URL=DATABASE_URL,
+    REDIS_URL=REDIS_URL,
+    BACKEND_CORS_ORIGINS=BACKEND_CORS_ORIGINS,
+    CLERK_API_KEY=CLERK_API_KEY,
+    CLERK_FRONTEND_API=CLERK_FRONTEND_API,
+    CLERK_JWKS_URL=CLERK_JWKS_URL,
+    CLERK_ISSUER=CLERK_ISSUER,
+    CLERK_AUDIENCE=CLERK_AUDIENCE,
 )
-CLERK_ISSUER = "https://loving-gopher-42.clerk.accounts.dev"
-CLERK_AUDIENCE = "authenticated"
